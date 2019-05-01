@@ -17,7 +17,8 @@ print()
 
 # CONECTANDO COM A BASE DE DADOS
 
-conn = sqlite3.connect('yahoo_financials_daily.db')
+db_file = '/miniconda3/envs/ccapm_regression/Code/yahoo_financials_daily.db'
+conn = sqlite3.connect(db_file)
 cur = conn.cursor()
 
 # DECLARACAO DAS VARIAVEIS 
@@ -34,7 +35,8 @@ min_date = datetime.datetime.strptime('2006-01-01', '%Y-%M-%d')
 
 # TICKERS DO YAHOO
 
-all_tickers = ["LAME4.SA",
+all_tickers = ["^BVSP",
+"LAME4.SA",
 "ABEV3.SA",
 "SBSP3.SA",
 "VALE3.SA",
@@ -494,15 +496,18 @@ for ticker in all_tickers:
         print(ticker, 'nao possui serie longa suficiente')
         continue
 
-    
     df = pd.DataFrame(stock_dict[ticker]['prices'])
     df = df.dropna()
     df_col = ['formatted_date','volume','high','low', 'close', 'adjclose']
     df = df[df_col]
+    df.drop_duplicates(subset='formatted_date', inplace=True)
     df.set_index('formatted_date',inplace=True)
     
 # SAIDA PARA A BASE DE DADOS
-    ticker = ticker[:5] # RETIRANDO .SA DO TICKER
+    if ticker == "^BVSP":
+        ticker = "Bovespa"
+    else:
+        ticker = ticker[:5] # RETIRANDO .SA DO TICKER
     df.to_sql(ticker, conn, if_exists=data_input_type)
     print(ticker, 'atualizado com sucesso')
     

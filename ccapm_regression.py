@@ -1,3 +1,8 @@
+"""
+AUTHOR: CAETANO ROBERTI
+DATE: 30/04/2019
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,8 +19,14 @@ import statsmodels.stats.stattools as smt
 
 def create_connection(db_file):
 
-    # cria conexao com o banco de dados
-    # entrada e o caminho para o banco de dados
+    """
+
+    Cria a conexao com o banco de dados contendo os dados das acoes.
+
+    :param db_file: path do banco de dados
+    :return: caso tenha sucesso, conexao com o banco de dados ou False em caso de falha
+
+    """
 
     try:
         con = sqlite3.connect(db_file)
@@ -26,191 +37,250 @@ def create_connection(db_file):
 
 def query_consumo(con):
 
-    # Faz o query da tabela Consumo dentro do banco de dados
-    # Para facilidade de calculo depois, retorna um dataframe contendo os dados
-    # comecando da data mais nova a mais antiga
-    # con: variavel que contem a conexao com banco de dados
-    # Retorna um DataFrame com os dados
+    """
+
+    Faz o query dos trimestres e seus respectivos indices de consumo das familias do banco de dados.
+
+    :param con: conexao com o banco de dados
+    :return: retorna um Pandas DataFrame contendo o consumo por trimestre
+
+    """
 
     consumo = pd.read_sql_query('SELECT Trimestre, Valor FROM Consumo',con)
     consumo.set_index('Trimestre', drop=True, inplace=True)
     consumo.columns = ['Consumo']
-    if int(consumo.index[0][-4:]) < int(consumo.index[-1][-4:]):
-        consumo = consumo.iloc[::-1]
 
     return consumo
 
-def query_stock(ticker, price,con):
+def query_stock(ticker, price,con, filter_zero_volume):
 
-    # Faz o query do banco de dados das acoes
-    # ticker: pode ser str, para buscar apenas uma acao
-    # ticker: pode ser uma lista, para buscar varias acoes
-    # price: deve ser ou 'adjclose' ou 'close'
-    # con: variavel que contem a conexao com banco de dados
-    # Retorna um DataFrame com os Dados
+    """
+
+    Faz o query dos precos das acoes no banco de dados.
+
+    Caso ticker seja uma unica string, ira fazer o query e entregar um DataFrame
+
+    Caso seja uma lista, ele ira fazer o query de cada ticker no banco de dados e guardara na forma de
+    DataFrame dentro de uma lista. No final do looping, faz o merge da lista em um unico Dataframe
+
+    Pode ser filtrado por volume, caso parametro volume seja positivo.
+
+    obs: Filtra dados que nao estiverem  no intervalo 2000 a 2018
+
+
+    :param ticker: ticker ou lista contendo os tickers das acoes
+    :param price: pode ser 'adjclose' ou 'close'
+    :param con: conexao com o banco de dados
+    :param con: boolean, se verdadeiro, traz apenas as datas que possuem volume > 0
+    :return: retorna um Pandas DataFrame contendo data e preco
+
+    """
 
     if type(ticker) == str:
-        main_df = pd.read_sql_query("SELECT formatted_date,%s FROM %s WHERE volume>0" % (price,ticker), con)
+        if filter_zero_volume == True:
+            main_df = pd.read_sql_query("SELECT formatted_date,%s FROM %s WHERE volume>0" % (price,ticker), con)
+        else:
+            main_df = pd.read_sql_query("SELECT formatted_date,%s FROM %s" % (price, ticker), con)
         main_df['formatted_date'] = pd.to_datetime(main_df['formatted_date'])
         main_df.set_index('formatted_date',drop=True,inplace=True)
         main_df = main_df['adjclose']
         main_df.columns = [ticker]
 
+
     else:
-        main_df = pd.read_sql_query("SELECT formatted_date,%s FROM %s WHERE volume>0" % (price,ticker[0]), con)
-        main_df['formatted_date'] = pd.to_datetime(main_df['formatted_date'])
-        main_df.set_index('formatted_date', drop=True, inplace=True)
-        main_df.columns = [ticker[0]]
-        main_df = main_df[main_df.index.year < 2019]
-        try:
-            len_ticker = len(ticker)
-        except:
-            len_ticker = ticker.shape[0]
+        lst_ = []
+        for t_ in ticker:
+            if filter_zero_volume == True:
+                df_ = pd.read_sql_query("SELECT formatted_date,%s FROM %s WHERE volume>0" % (price, t_), con)
+            else:
+                df_ = pd.read_sql_query("SELECT formatted_date,%s FROM %s" % (price, t_), con)
 
-        if len_ticker > 1:
-            for t_ in ticker[1:]:
-                sec_df = pd.read_sql_query("SELECT formatted_date,%s FROM %s WHERE volume>0" % (price, t_), con)
-                sec_df['formatted_date'] = pd.to_datetime(sec_df['formatted_date'])
-                sec_df.set_index('formatted_date', drop=True, inplace=True)
-                sec_df.columns = [t_]
-                main_df = main_df.join(sec_df)
+            df_['formatted_date'] = pd.to_datetime(df_['formatted_date'])
+            df_.drop_duplicates(subset='formatted_date', inplace=True)
+            df_.set_index('formatted_date', drop=True, inplace=True)
+            df_.columns = [t_]
+            lst_.append(df_)
 
-    main_df = main_df[main_df.index.year < 2019]
-    if main_df.index[0] < main_df.index[-1]:
-        main_df = main_df.iloc[::-1 ]
+        main_df = pd.concat(lst_, axis=1, sort=False) # concatenando a lista de DataFrame em um so
+
+    main_df.sort_index(inplace=True)
+    main_df = main_df[(main_df.index.year >= 2000) & (main_df.index.year <= 2018)] # filtra ano < 2000 e > 2018
+
     return main_df
-
 
 def calcular_retorno_consumo(consumo):
 
-    # Calcula o retorno do consumo
-    # consumo: deve ser entrado o DataFrame que foi feito o query utilizando function "query_consumo(con)"
-    # Retorna um DataFrame contendo o retorno do consumo trimestre a trimestre
+    """
+
+    Calcula o retorno do consumo trimestre a trimestre.
+
+    O retorno e calculado por ln(Cons t/ Cons t-1)
+
+    Ex: 2o Trimestre de 2000 = ln (Consumo 2o Tri 2000 / Consumo 1o Tri 2000)
+
+    :param consumo: DataFrame contendo consumo por trimestre
+    :return: retorna um pandas DataFrame contendo retorno do consumo por trimestre
+
+    """
+
 
     if type(consumo) != pd.DataFrame:
         print('Entrar com pandas.DataFrame')
         return ImportError
+    consumo_retornos = np.log(consumo) - np.log(consumo.shift(1))
+    consumo_retornos  = consumo_retornos.iloc[1:]
 
-    consumo_retornos = np.log(np.array(consumo['Consumo'].iloc[:-1])/np.array(consumo['Consumo'].iloc[1:]))
+    return consumo_retornos
 
-    consumo_retornos_df = pd.DataFrame(consumo_retornos, index=consumo.index[:-1], columns=['Consumo'])
 
-    return consumo_retornos_df
+def calcular_retorno_series_stocks(df):
 
-# Calcula o retorno para cada ticker dentro do dataframe
-#
-def calcular_retorno_stocks(df):
+    """
 
-    # calcula o retorno trimestral das acoes
-    # retorna um dataframe com o retorno das acoes por trimestre
+    Calcula o retorno das acoes trimestrais utilizando uma pandas Series como entrada.
 
-    lst_quarter = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]]
+    Primeiro, verifica se o arquivo entrado e uma pandas Series. Caso nao seja, retorna Falso.
+
+    Faz um looping de ano a ano e depois de quarter a quarter. Para cada quarter, separa o pedaco da serie
+    daquele quarter e pega o primeiro preco do pedaco e o ultimo preco do pedaco, calcula o log do retorno.
+
+    Armazena o retorno na lst_returns e ao mesmo tempo armazena o trimestre na lst_quar_str.
+
+    Ao final, transforma as listas em um Pandas DataFrame.
+
+
+
+    :param df: Pandas series contendo contendo retorno diarios
+    :return: Pandas DataFrame contendo o retorno trimestral das acoes
+
+    """
+
+    lst_quarter = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
 
     if type(df) == pd.Series:
-        ticker = df.name
+        ticker = df.name # pegando nome do ticker
         lst_returns = []
         lst_quar_str = []
-        years = pd.unique([y_.year for y_ in df.index])
-        if years[0]<years[-1]:
-            years = years[::-1]
-        for y_ in years:
+        years = list(dict.fromkeys([y.year for y in df.index])) # pegando a sequencia de anos
+
+        for y in years:
             quart = 1
             for q_ in lst_quarter:
-                df_period = df[((df.index.month.isin(q_)) & (df.index.year == y_))]
+                df_period = df[((df.index.month.isin(q_)) & (df.index.year == y))]
                 df_period.dropna(inplace=True)
-                if df_period.empty == True:
-                    continue
-                str_quarter = ("%sº trimestre %s" % (quart, y_))
+                str_quarter = ("%sº trimestre %s" % (quart, y))
                 quart += 1
-                price_end_quarter = df_period[0]
-                price_beg_quarter = df_period[-1]
+                if df_period.empty == True:
+                    retorno = float('NaN')
+                else:
+                    price_beg_quarter = df_period[0]
+                    price_end_quarter = df_period[-1]
 
+                    retorno = np.log(price_end_quarter / price_beg_quarter)
 
-                retorno = np.log(price_end_quarter/price_beg_quarter)
-
-
-                if math.isnan(retorno) == True:
-                    print('Database has an Error')
-                    return TypeError
+                    if math.isnan(retorno) == True:
+                        print('Database has an Error')
+                        return TypeError
 
                 lst_returns.append(retorno)
                 lst_quar_str.append(str_quarter)
 
         df_retorno = pd.DataFrame(lst_returns, index=lst_quar_str, columns=[ticker])
+
+        df_retorno['m'] = [int(m[0]) for m in df_retorno.index]
+        df_retorno['y'] = [int(y[-4:]) for y in df_retorno.index]
+        df_retorno.sort_values(by=['y', 'm'], inplace=True)
+        df_retorno.drop(['m', 'y'], axis=1, inplace=True)
 
         return df_retorno
 
-    elif type(df) == pd.DataFrame:
-        ticker = df.columns[0]
-        df_split = df[ticker]
-        lst_returns = []
-        lst_quar_str = []
-        years = pd.unique([y_.year for y_ in df_split.index])
-        if years[0] < years[-1]:
-            years = years[::-1]
-        for y_ in years:
-            quart = 1
-            for q_ in lst_quarter:
-                df_period = df_split[((df_split.index.month.isin(q_)) & (df_split.index.year == y_))]
-                df_period.dropna(inplace=True)
-                if df_period.empty == True:
-                    continue
-                str_quarter = ("%sº trimestre %s" % (quart, y_))
-                quart += 1
-                price_end_quarter = df_period[0]
-                price_beg_quarter = df_period[-1]
+    else:
+        raise TypeError('Utilizar pandas Series')
 
-                retorno = np.log(price_end_quarter / price_beg_quarter)
 
-                if math.isnan(retorno) == True:
-                    print('Database has an Error')
-                    oi=1
-                    return TypeError
+def calcular_retorno_df_stocks(df):
 
-                lst_returns.append(retorno)
-                lst_quar_str.append(str_quarter)
+    """
 
-        df_retorno = pd.DataFrame(lst_returns, index=lst_quar_str, columns=[ticker])
+    Calcula o retorno das acoes trimestrais utilizando uma pandas Series como entrada.
 
-        if df.columns.shape[0] > 1:
-            for col_ in df.columns[1:]:
-                ticker = col_
-                df_split = df[ticker]
-                lst_returns = []
-                lst_quar_str = []
-                years = pd.unique([y_.year for y_ in df_split.index])
-                if years[0] < years[-1]:
-                    years = years[::-1]
-                for y_ in years:
-                    quart = 1
-                    for q_ in lst_quarter:
-                        df_period = df_split[((df_split.index.month.isin(q_)) & (df_split.index.year == y_))]
-                        df_period.dropna(inplace=True)
-                        if df_period.empty == True:
-                            continue
-                        str_quarter = ("%sº trimestre %s" % (quart, y_))
-                        quart += 1
+    Primeiro, verifica se o arquivo entrado e uma pandas DataFrame. Caso nao seja, retorna Falso.
 
+    Faz um looping de ticker a ticker, depois de ano a ano e depois de quarter a quarter. Para cada ticker separa
+    a serie de precos dele. Para cada quarter, separa o pedaco da serie de precos daquele quarter e pega o primeiro
+    preco do pedaco e o ultimo preco do pedaco, calcula o log do retorno.
+
+    :param df:
+    :return:
+
+    """
+
+    lst_quarter = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
+    lst_df = []
+
+    if type(df) == pd.DataFrame:
+
+        for col_ in df.columns:
+            ticker = col_
+            df_split = df[ticker]
+            lst_returns = []
+            lst_quar_str = []
+            years = list(dict.fromkeys([y.year for y in df_split.index]))
+            for y in years:
+                quart = 1
+                for q_ in lst_quarter:
+                    df_period = df_split[((df_split.index.month.isin(q_)) & (df_split.index.year == y))]
+                    df_period.dropna(inplace=True)
+                    str_quarter = ("%sº trimestre %s" % (quart, y))
+                    quart += 1
+                    if df_period.empty == True:
+                        retorno = float('NaN')
+                    else:
                         price_end_quarter = df_period[0]
                         price_beg_quarter = df_period[-1]
-
                         retorno = np.log(price_end_quarter / price_beg_quarter)
 
                         if math.isnan(retorno) == True:
                             print('Database has an Error')
                             return TypeError
 
-                        lst_returns.append(retorno)
-                        lst_quar_str.append(str_quarter)
+                    lst_returns.append(retorno)
+                    lst_quar_str.append(str_quarter)
 
-                df_retorno_2 = pd.DataFrame(lst_returns, index=lst_quar_str, columns=[ticker])
-                df_retorno = df_retorno.join(df_retorno_2)
+            df_ = pd.DataFrame(lst_returns, index=lst_quar_str, columns=[ticker])
+            lst_df.append(df_)
+
+        df_retorno = pd.concat(lst_df, axis=1,sort=False)
+        df_retorno['m'] = [int(m[0]) for m in df_retorno.index]
+        df_retorno['y'] = [int(y[-4:]) for y in df_retorno.index]
+        df_retorno.sort_values(by=['y', 'm'], inplace=True)
+        df_retorno.drop(['m', 'y'], axis=1, inplace=True)
 
         return df_retorno
+
     else:
-        return False
+        raise TypeError('Utilizar pandas DataFrame')
+
 
 def calcular_regressao_linear(retorno_stocks, retorno_consumo):
+
+    """
+
+    Faz a regressao do log do retorno de cada ticker (variavel dependente) contra o consumo (variavel explicativa) e
+    uma constante.
+
+    Rt = Const + B Ct + et
+
+    Apos fazer a regressao, armazena em um dicionario, sendo a chave o ticker e o conteudo a propria regressao.
+
+    Dentro do loop, tambem extrai os residuos para um DataFrame, armazenando cada um em uma lista. Apos finalizado,
+    concatena todos os DataFrames em um so.
+
+    :param retorno_stocks: Pandas DataFrame contendo os retornos das acoes trimestrais
+    :param retorno_consumo: Pandas DataFrame contendo os retornos do consumo trimestrais
+    :return: Retorna um dicionario contendo como chave o ticker e para cada ticker a regressao do stats model.
+             Tambem retorna um Pandas DataFrame contendo os residuos de cada trimestre.
+    """
 
     # Calcula utilizando statsmodels a regressao
     # variavel dependente acao
@@ -224,26 +294,35 @@ def calcular_regressao_linear(retorno_stocks, retorno_consumo):
     retorno_stocks = retorno_stocks.join(retorno_consumo)
     retorno_stocks['constante'] = 1
     reg_dict = {}
-    first_iterarion = 1
+    lst_df = []
 
     for stock in cols_retorno_stocks:
         reg_ = sm.OLS(endog=retorno_stocks[stock], exog=retorno_stocks[['constante','Consumo']],missing='drop').fit()
         reg_dict[stock] = reg_
-        if first_iterarion == 1:
-            df_resid = pd.DataFrame(reg_dict[stock].resid,columns=[stock])
-            first_iterarion = 0
-        else:
-            df_resid_2 = pd.DataFrame(reg_dict[stock].resid,columns=[stock])
-            df_resid =  pd.merge(df_resid, df_resid_2, left_index=True, right_index=True, how='outer')
+        df_ = pd.DataFrame(reg_dict[stock].resid,columns=[stock])
+        lst_df.append(df_)
+
+    pdb.set_trace()
+    df_resid = pd.concat(lst_df,axis=1,sort=False)
     df_resid['m'] = [int(m[0]) for m in df_resid.index]
     df_resid['y'] = [int(y[-4:]) for y in df_resid.index]
     df_resid.sort_values(by=['y','m'],inplace=True)
-    df_resid = df_resid.iloc[::-1]
     df_resid.drop(['m', 'y'], axis=1, inplace=True)
 
     return (reg_dict, df_resid)
 
 def generate_regression_dataframe(reg_dict):
+
+    """
+
+    Extrai do dicionario contendo as regressoes os parametros, desvios padroes, p valores, r quadrado,
+    r quadrado ajustado, estatistica f, p valor da estatistica f e durbin watson.
+
+    Armazena todas essas informacoes em um DataFrame, sendo cada linha respectiva a um ticker.
+
+    :param reg_dict: Dicionario contendo as regressoes.
+    :return: DataFrame contendo os parametros das regressoes nas colunas e os tickers nas linhas
+    """
 
     # Retira as informacoes do dicionario com as regressoes
     # entrada e o dicionario contendo as regressoes
@@ -300,22 +379,36 @@ available_tables = [tab[0] for tab in available_tables_1 if tab[0] != 'Consumo']
 
 
 # Quering do consumo no banco de dados
-consumo = query_consumo(con)
+df_consumo = query_consumo(con)
 
 
 # Quering das tabelas contendo informacoes das acoes
-df_main = query_stock(available_tables, 'adjclose', con)
+df_stocks = query_stock(available_tables, 'adjclose', con, False)
 
 
 # Calculando o retorno das acoes
-retorno_stocks = calcular_retorno_stocks(df_main)
+if type(df_stocks) == pd.DataFrame:
+    df_retorno_stocks = calcular_retorno_df_stocks(df_stocks)
+elif type(df_stocks)==pd.Series:
+    df_retorno_stocks = calcular_retorno_series_stocks(df_stocks)
+else:
+    oi=1
+    pdb.set_trace()
+
+
+
+# df_retorno_stocks = calcular_retorno_stocks(df_stocks)
 
 # Calculando o retorno do consumo
-retorno_consumo = calcular_retorno_consumo(consumo)
+df_retorno_consumo = calcular_retorno_consumo(df_consumo)
 
 # calulando regressao linear
-reg_dict, df_resid = calcular_regressao_linear(retorno_stocks,retorno_consumo)
+reg_dict, df_resid = calcular_regressao_linear(df_retorno_stocks,df_retorno_consumo)
 
 
 # extraindo os dados das regressoes
 df_reg = generate_regression_dataframe(reg_dict)
+
+
+
+

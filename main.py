@@ -3,8 +3,6 @@ import query_db
 import calculate_returns
 import calculate_regression
 import pandas as pd
-import pdb
-
 
 """
 AUTHOR: Caetano Florian Roberti
@@ -158,8 +156,6 @@ while answer.lower() != 'done':
 
 
 print('\nCalculating...\n')
-
-pdb.set_trace()
 
 # querying consumption
 consumption_df = query_db.query_household_consumption_index(db_path)

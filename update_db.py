@@ -164,7 +164,7 @@ def update_db_consumption(db_path):
 
     # Update Db config
     data_input_type = 'replace'  # replace or append
-    table_name = "Household_Consumption_Index"
+    table_name = "Consumption_Index"
 
     # Trying to connect to the DataBase
     try:
@@ -179,7 +179,7 @@ def update_db_consumption(db_path):
     # IMPORTANDO TABELA EM JSON E ARRUMANDO HEADER
     sidra_df = pd.DataFrame(requests.get(url=sidra_api_url).json())
     sidra_df.columns = sidra_df.iloc[0]
-    sidra_df = sidra_df.iloc[1:]
+    sidra_df = sidra_df.iloc[2:]
     sidra_df['Valor'] = sidra_df['Valor'].astype('float')
     sidra_df.to_sql(table_name, db_connection, if_exists=data_input_type)
 

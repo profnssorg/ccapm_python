@@ -44,8 +44,8 @@ def get_all_available_stock_table(db_path):
     cursor = db_connection.cursor()
 
     available_tables_1 = cursor.execute("SELECT name FROM sqlite_master WHERE type ='table'").fetchall()
-    available_tables = [tab[0] for tab in available_tables_1 if tab[0] != 'Consumption_Index' and len(tab[0])<=5]
-
+    available_tables = [tab[0] for tab in available_tables_1 if tab[0] != 'Consumption_Index']
+    available_tables.sort()
     db_connection.close()
 
     return available_tables

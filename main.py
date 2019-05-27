@@ -44,7 +44,7 @@ Date: 04 May 2019
 """
 
 # Program config
-db_path = '/miniconda3/envs/ccapm_regression/Code/ccapm_regression/yahoo_financials_daily.db' # path to the Database
+db_path = 'ccapm_regression_database.db' # path to the Database
 price = 'adjclose' # can be 'adjclose' or 'close'
 filter_zero_volume = True # filter stock prices where volume = 0, it is advised to set True
 
@@ -181,6 +181,7 @@ regression_df = calculate_regression.generate_regression_dataframe(regression_di
 # configuring the pandas display to show the entire dataframe
 pd.options.display.max_rows = 999
 pd.options.display.max_columns = 20
+pd.set_option('display.width', 1000)
 
 
 print("""

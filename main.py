@@ -46,7 +46,7 @@ Date: 04 May 2019
 # Program config
 db_path = 'ccapm_regression_database.db' # path to the Database
 price = 'adjclose' # can be 'adjclose' or 'close'
-filter_zero_volume = True # filter stock prices where volume = 0, it is advised to set True
+filter_zero_volume = False # filter stock prices where volume = 0, it is advised to set True
 
 # welcoming
 

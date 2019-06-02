@@ -102,7 +102,7 @@ def update_db_stocks(db_path):
 
     # Yahoo Finance querying config
     start_date = '2000-01-01'  # starting date query
-    end_date = '2018-12-31'  # end date query
+    end_date = '2050-12-31'  # end date query
     period = 'daily'  # can be 'daily', 'weekly' and 'monthly'
 
     # Update Db config
@@ -124,7 +124,7 @@ def update_db_stocks(db_path):
         print(e)
         return False
 
-    i=0
+    i=1
     for ticker in all_tickers:
         print(ticker, ' - ', i, 'of', len(all_tickers))
         i += 1
@@ -174,12 +174,12 @@ def update_db_consumption(db_path):
         return False
 
     # URL DA API DO IBGE SIDRA PARA IMPORTAR TABELA
-    sidra_api_url = "http://api.sidra.ibge.gov.br/values/t/1620/n1/all/v/all/p/last%2077/c11255/93404/d/v583%204"
+    sidra_api_url = "http://api.sidra.ibge.gov.br/values/t/1620/n1/all/v/all/p/last%2078/c11255/93404/d/v583%202"
 
     # IMPORTANDO TABELA EM JSON E ARRUMANDO HEADER
     sidra_df = pd.DataFrame(requests.get(url=sidra_api_url).json())
     sidra_df.columns = sidra_df.iloc[0]
-    sidra_df = sidra_df.iloc[2:]
+    sidra_df = sidra_df.iloc[1:]
     sidra_df['Valor'] = sidra_df['Valor'].astype('float')
     sidra_df.to_sql(table_name, db_connection, if_exists=data_input_type)
 

@@ -136,7 +136,7 @@ def query_stock_prices(db_path, ticker, price, filter_zero_volume):
         main_df = pd.concat(lst_, axis=1, sort=False) # concatenating the list into one main DataFrame
 
     main_df.sort_index(inplace=True)
-    main_df = main_df[(main_df.index.year >= 2000) & (main_df.index.year <= 2018)] # filtra ano < 2000 e > 2018
+    main_df = main_df[(main_df.index.year >= 2000)] # filtra ano < 2000
 
     db_connection.close()
 
